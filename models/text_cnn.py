@@ -11,6 +11,16 @@ import torch.nn.functional as F
 class TextCNN(nn.Module):
     def __init__(self, vocab_size, num_classes, num_kernels, kernel_size, stride=1, emb_size=128,
                  dropout=0.0, padding_index=0):
+        """
+        :param vocab_size: 词表大小
+        :param num_classes: 类别数
+        :param num_kernels: 卷积核数量(channels数)
+        :param kernel_size:  卷积核尺寸
+        :param stride: stride
+        :param emb_size: 词向量维度
+        :param dropout: dropout值
+        :param padding_index: padding_index
+        """
         super(TextCNN, self).__init__()
         self.emb = nn.Embedding(vocab_size, emb_size, padding_idx=padding_index)
         self.convs = nn.ModuleList(
