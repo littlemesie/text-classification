@@ -22,6 +22,26 @@ class Similarity(nn.Module):
             y = y / torch.norm(y, dim=-1, keepdim=True)
         return torch.matmul(x, y.t()) / temp
 
+class UTCLoss:
+    """"""
+    def __call__(self, logit, label):
+        return self.forward(logit, label)
+
+    def forward(self, logit, label):
+        logit = (1.0 - 2.0 * label) * logit
+        logit_neg = logit - label * 1e12
+        logit_pos = logit - (1.0 - label) * 1e12
+        zeros = torch.zeros_like(logit[..., :1])
+        logit_neg = torch.concat([logit_neg, zeros], dim=-1)
+        logit_pos = torch.concat([logit_pos, zeros], dim=-1)
+        label = torch.concat([label, zeros], dim=-1)
+        logit_neg[label == -100] = -1e12
+        logit_pos[label == -100] = -1e12
+        neg_loss = torch.logsumexp(logit_neg, dim=-1)
+        pos_loss = torch.logsumexp(logit_pos, dim=-1)
+        loss = (neg_loss + pos_loss).mean()
+        return loss
+
 class SimCSE(nn.Module):
     def __init__(self, model_path, device, embed_size=128, pooling="cls", scale=0.05, dropout=0.0):
         super(SimCSE, self).__init__()
@@ -58,14 +78,8 @@ class SimCSE(nn.Module):
     def cosine_sim(self, embed1, embed2):
         """"""
         cosine_sim = F.cosine_similarity(embed1, embed2, dim=-1)
-        return cosine_sim
 
-    def forward(self, input_ids, token_type_ids, attention_mask):
-        """"""
-        out = self.get_pooled_embedding(input_ids, token_type_ids, attention_mask)
-        # out = self.dropout(out)
-        out = self.dnn(out)
-        return out
+        return cosine_sim
 
     def supervised_loss_(self, cosine_sim, target):
         """
@@ -98,3 +112,102 @@ class SimCSE(nn.Module):
         p_loss = self.supervised_loss(cosine_sim, target[0])
         scl_loss = self.supervised_loss(cosine_sim, target[1])
         return p_loss, scl_loss
+
+    def _rgl_loss(self, embed1, category, labels, equal_type="raw", alpha_rgl=0.5):
+        """
+        Compute the label consistency loss of sentence embeddings per batch.
+        Please refer to https://aclanthology.org/2022.findings-naacl.81/
+        for more details.
+        """
+        (category_token, category_segment, category_mask) = category
+
+        batch_size = embed1.shape[0]
+        loss = 0
+        scores_list = []
+        for i in range(batch_size):
+            score_list = []
+            for j in range(category_token.shape[0]):
+            # for j in range(2):
+                category_emb = self.forward(category_token[j].unsqueeze(0), category_segment[j].unsqueeze(0),
+                                            category_mask[j].unsqueeze(0))
+                # print(category_emb)
+                score = F.cosine_similarity(embed1[i].unsqueeze(0), category_emb, dim=-1)
+                score_list.append(score.detach().numpy()[0])
+            # print(score_list)
+            scores_list.append(score_list)
+        logits = torch.Tensor(scores_list)
+        loss += F.cross_entropy(logits, labels)
+
+        return loss
+
+    def forward(self, input_ids, token_type_ids, attention_mask):
+        """"""
+        out = self.get_pooled_embedding(input_ids, token_type_ids, attention_mask)
+        # out = self.dropout(out)
+        out = self.dnn(out)
+        return out
+
+
+class SimCSECNN(nn.Module):
+    def __init__(self, vocab_size, num_kernels, kernel_size, stride=1, emb_size=128, hidden_size=128,
+                 dropout=0.5, padding_index=0):
+        """
+        :param vocab_size: 词表大小
+        :param num_kernels: 卷积核数量(channels数)
+        :param kernel_size:  卷积核尺寸
+        :param stride: stride
+        :param emb_size: 词向量维度
+        :param dropout: dropout值
+        :param padding_index: padding_index
+        """
+        super(SimCSECNN, self).__init__()
+        self.emb = nn.Embedding(vocab_size, emb_size, padding_idx=padding_index)
+        self.convs = nn.ModuleList(
+            [nn.Conv2d(1, num_kernels, (k, emb_size), stride) for k in kernel_size])
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(num_kernels * len(kernel_size), hidden_size)
+        self.sim = Similarity(norm=True)
+
+    def conv_and_pool(self, x, conv):
+        x = F.relu(conv(x)).squeeze(3)
+        x = F.max_pool1d(x, x.size(2)).squeeze(2)
+        return x
+
+    def get_pooled_embedding(self, x):
+        emb = self.emb(x)
+        emb = emb.unsqueeze(1)
+        emb = torch.cat([self.conv_and_pool(emb, conv) for conv in self.convs], 1)
+        emb = self.dropout(emb)
+        emb = self.fc(emb)
+
+        return emb
+
+    def forward(self, x):
+        out = self.get_pooled_embedding(x)
+        return out
+
+    def _rgl_loss(self, text_embed, category_embed, labels, device, equal_type="raw", alpha_rgl=0.5):
+        """
+        Compute the label consistency loss of sentence embeddings per batch.
+        Please refer to https://aclanthology.org/2022.findings-naacl.81/
+        for more details.
+        """
+        loss = 0
+        scores_list = []
+        batch_size = text_embed.shape[0]
+        for i in range(batch_size):
+            score_list = []
+            for j in range(category_embed.shape[0]):
+                # print(text_embed[i].unsqueeze(0), category_embed[j])
+                score = self.sim(text_embed[i].unsqueeze(0), category_embed[j])
+                # print(score)
+                # break
+                # score = F.cosine_similarity(text_embed[i].unsqueeze(0), category_embed[j], dim=-1)
+                score_list.append(score.detach().cpu().numpy()[0])
+            scores_list.append(score_list)
+        logits = torch.Tensor(scores_list).to(device)
+        # logits = logits.softmax(dim=1)
+        logits = logits.sigmoid()
+        loss += F.cross_entropy(logits, labels)
+        # loss += F.binary_cross_entropy(logits, labels)
+        return loss
