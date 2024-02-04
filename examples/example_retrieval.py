@@ -18,7 +18,7 @@ from torch.utils.data import Dataset, DataLoader
 # from transformers.optimization import AdamW
 from transformers import AdamW, get_linear_schedule_with_warmup
 # from transformers import BertTokenizer, BertConfig, AlbertModel
-from transformers import AutoTokenizer, AutoConfig, AutoModel
+from transformers import AutoTokenizer, AutoConfig, AutoModel, AutoModelForSequenceClassification
 from sklearn.metrics import f1_score
 from core.model_config import get_model_config
 from models.retrieval_match import SemanticIndexBatchNeg
@@ -245,13 +245,13 @@ def train(load_model=False):
 
     total_batch = 0
     best_loss = 0.00001
-    early_stop_batch = 0
 
     start_time = time.time()
     for epoch in range(config.epochs):
         tqdm_bar = tqdm(train_dataloader, desc="training epoch{epoch}".format(epoch=epoch))
         loss_total, loss_diffs = [], []
         epoch_time = time.time()
+        early_stop_batch = 0
         for batch_idx, batch_data in enumerate(tqdm_bar):
             text_token = batch_data['text_token'].to(device)
             text_type_ids = batch_data['text_type_ids'].to(device)
@@ -277,12 +277,12 @@ def train(load_model=False):
                 # 保存模型
                 mean_diff_loss = np.mean(loss_diffs[-10:])
                 if best_loss > mean_diff_loss:
-                    early_stop_batch = 0
+
                     best_loss = mean_diff_loss
                     # 保存最好好的模型
                     torch.save(model.state_dict(), best_model_path)
+                    early_stop_batch += 1
                 # 提前终止训练
-                early_stop_batch += 1
                 if early_stop_batch == 10:
                     torch.save(model.state_dict(), best_model_path)
                     return
@@ -325,7 +325,7 @@ def label_index(tokenizer):
         hnsw_ef=config.hnsw_ef,
         hnsw_m=config.hnsw_m,
     )
-    final_index.save_index("model_index.bin")
+    final_index.save_index("bert_index.bin")
     del final_index
 
 def predict(text, tokenizer):
@@ -349,7 +349,7 @@ def predict(text, tokenizer):
     model.eval()
     # load index
     index = hnswlib.Index(space="cosine", dim=config.output_emb_size if config.output_emb_size > 0 else 768)
-    index.load_index("model_index.bin", max_elements=config.hnsw_max_elements)
+    index.load_index("bert_index.bin", max_elements=config.hnsw_max_elements)
     # print(index.get_current_count())
     # load label
     id2label, label2id, label_df = get_label_data()
@@ -362,7 +362,7 @@ def predict(text, tokenizer):
     # print(input_ids)
     text_embedding = model.get_pooled_embedding(text_token, text_type_ids, text_mask)
 
-    idx, distances = index.knn_query(text_embedding.detach().numpy(), 10)
+    idx, distances = index.knn_query(text_embedding.detach().numpy(), 5)
     for i, ind in enumerate(idx[0]):
         label = id2label[ind]
         distance = distances[0][i]
@@ -371,9 +371,12 @@ def predict(text, tokenizer):
 
 
 if __name__ == '__main__':
-    """"""
+    """
+    数据集：链接: https://pan.baidu.com/s/1n5RsF5y-1HUGbm6GCv76hg?pwd=rdxx 提取码: rdxx
+    """
     tokenizer = load_tokenizer(config.model_path)
-    train(load_model=False)
-    # # label_index(tokenizer)
-    # text = '快要到期的“我的资料”怎么续日期？'
-    # predict(text, tokenizer)
+    # train(load_model=False)
+    # label_index(tokenizer)
+    text = '十个月婴儿的能力.刚满十个月婴儿应具备哪些能力?'
+    print(text)
+    predict(text, tokenizer)
