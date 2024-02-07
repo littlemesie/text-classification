@@ -183,7 +183,7 @@ def train(load_model=False):
 
     total_batch = 0
     best_loss = 0.00001
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.BCEWithLogitsLoss()
     start_time = time.time()
     for epoch in range(config.epochs):
         tqdm_bar = tqdm(train_dataloader, desc="training epoch{epoch}".format(epoch=epoch))
