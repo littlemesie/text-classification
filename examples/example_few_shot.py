@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 
 """
-@date: 2024/2/6 下午2:55
+@date: 2024/2/7 下午2:05
 @summary:
 """
 import os
@@ -16,13 +16,12 @@ from tqdm import tqdm
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from transformers import AdamW, get_linear_schedule_with_warmup
-from transformers import AutoTokenizer, AutoConfig, AutoModel
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from sklearn.metrics import f1_score
 from core.model_config import get_model_config
-from models.bert import BertClassfication
 from utils.time_util import get_time_diff
 
-config = get_model_config('bert')
+config = get_model_config('few_shot')
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -127,15 +126,15 @@ def evaluation(model, valid_dataloader, criterion):
         input_ids = batch_data['input_ids'].to(device)
         token_type_ids = batch_data['token_type_ids'].to(device)
         attention_mask = batch_data['attention_mask'].to(device)
+        out = model(**{'input_ids': input_ids, 'token_type_ids': token_type_ids, 'attention_mask': attention_mask})
+        logits = out['logits']
         labels = batch_data['batch_label']
         y_label = y_label + labels.tolist()
-        out = model(input_ids, token_type_ids, attention_mask)
         # loss = criterion(out, labels)
-        probs = F.sigmoid(out)
+        probs = F.sigmoid(logits)
         for p in probs:
             p_label = [1 if i > 0.5 else 0 for i in p]
             pred_label.append(p_label)
-
 
     micro_f1_score = f1_score(y_pred=pred_label, y_true=y_label, average="micro")
 
@@ -148,17 +147,8 @@ def train(load_model=False):
 
     id2label, label2id = get_label_data()
     train_dataloader, dev_dataloader = get_train_dataloader(tokenizer, len(label2id), label2id)
-    ptm_config = AutoConfig.from_pretrained(config.model_path)
-    ptm = AutoModel.from_pretrained(config.model_path, ptm_config)
-    model = BertClassfication(
-        ptm,
-        ptm_config,
-        device,
-        num_classes=len(id2label),
-        pooling=config.pooling,
-        dropout=config.dropout,
-        emb_size=config.output_emb_size
-    )
+
+    model = AutoModelForSequenceClassification.from_pretrained(config.model_path, num_labels=len(label2id))
     # model path
     best_model_path = f"{config.best_model}.pt"
     if load_model:
@@ -193,19 +183,22 @@ def train(load_model=False):
             token_type_ids = batch_data['token_type_ids'].to(device)
             attention_mask = batch_data['attention_mask'].to(device)
             labels = batch_data['batch_label'].to(device)
+
             # loss
-            out = model(input_ids, token_type_ids, attention_mask)
-            # print(out.shape, labels.shape)
-            loss = criterion(input=out, target=labels)
+            out = model(**{'input_ids': input_ids, 'token_type_ids': token_type_ids, 'attention_mask': attention_mask})
+            logits = out['logits']
+            logits = F.sigmoid(logits)
+
+            loss = criterion(input=logits, target=labels)
 
             # print(loss)
             # micro_f1_score = evaluation(model, dev_dataloader, criterion)
             # print(micro_f1_score)
 
             loss.backward()
-            optimizer.zero_grad()
-            scheduler.step()
             optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
             loss_total.append(loss.detach().item())
             if batch_idx != 0:
                 loss_diffs.append(abs(loss.detach().item() - loss_total[-2]))
@@ -240,17 +233,7 @@ def predict(text, tokenizer):
     # load label
     id2label, label2id = get_label_data()
     # load model
-    ptm_config = AutoConfig.from_pretrained(config.model_path)
-    ptm = AutoModel.from_pretrained(config.model_path, ptm_config)
-    model = BertClassfication(
-        ptm,
-        ptm_config,
-        device,
-        num_classes=len(id2label),
-        pooling=config.pooling,
-        dropout=config.dropout,
-        emb_size=config.output_emb_size
-    )
+    model = AutoModelForSequenceClassification.from_pretrained(config.model_path, num_labels=len(label2id))
     # model path
     best_model_path = f"{config.best_model}.pt"
     model.load_state_dict(torch.load(best_model_path, map_location=torch.device('cpu')))
@@ -263,14 +246,15 @@ def predict(text, tokenizer):
     attention_mask = label_source.get('attention_mask').squeeze(1).to(device)
     token_type_ids = label_source.get('token_type_ids').squeeze(1).to(device)
     # print(input_ids)
-    out = model(input_ids, token_type_ids, attention_mask)
+    out = model(**{'input_ids': input_ids, 'token_type_ids': token_type_ids, 'attention_mask': attention_mask})
+    logits = out['logits']
 
-    probs = torch.sigmoid(out)
+    probs = F.sigmoid(logits)
     print(probs)
     labels = []
-    for prob in probs.tolist():
+    for prob in probs:
         for i, p in enumerate(prob):
-            if p > 0.1:
+            if p > 0.5:
                 label = id2label[i]
                 labels.append((label, round(p, 4)))
     print(labels)
@@ -280,8 +264,8 @@ if __name__ == '__main__':
     """
     数据集：链接: https://pan.baidu.com/s/1n5RsF5y-1HUGbm6GCv76hg?pwd=rdxx 提取码: rdxx
     """
-    # train(load_model=False)
-    tokenizer = load_tokenizer(config.model_path)
-    text = '十个月婴儿的能力.刚满十个月婴儿应具备哪些能力?'
-    print(text)
-    predict(text, tokenizer)
+    train(load_model=False)
+    # tokenizer = load_tokenizer(config.model_path)
+    # text = '十个月婴儿的能力.刚满十个月婴儿应具备哪些能力?'
+    # print(text)
+    # predict(text, tokenizer)
