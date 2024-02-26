@@ -9,7 +9,8 @@ warmup_proportion: 0.1
 bertadam: False
 
 
-best_model: 'bert_classification_best'
+best_model: 'few_shot_classification_best'
 data_path: '/media/mesie/F0E66F06E66ECC82/数据/paddle/baike_qa_multilabel'
-model_path: '/home/mesie/python/aia-nlp-service/lib/pretrained/bert-base-chinese'
+model_path: '/media/mesie/F0E66F06E66ECC82/model/ernie-3.0-medium-zh'
+#model_path: '/home/mesie/python/aia-nlp-service/lib/pretrained/bert-base-chinese'
 #model_path: '/home/mesie/python/aia-nlp-service/lib/pretrained/albert_chinese_base'

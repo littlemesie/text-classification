@@ -149,7 +149,7 @@ def train(load_model=False):
     id2label, label2id = get_label_data()
     train_dataloader, dev_dataloader = get_train_dataloader(tokenizer, len(label2id), label2id)
     ptm_config = AutoConfig.from_pretrained(config.model_path)
-    ptm = AutoModel.from_pretrained(config.model_path, ptm_config)
+    ptm = AutoModel.from_pretrained(config.model_path)
     model = BertClassfication(
         ptm,
         ptm_config,
@@ -241,7 +241,7 @@ def predict(text, tokenizer):
     id2label, label2id = get_label_data()
     # load model
     ptm_config = AutoConfig.from_pretrained(config.model_path)
-    ptm = AutoModel.from_pretrained(config.model_path, ptm_config)
+    ptm = AutoModel.from_pretrained(config.model_path)
     model = BertClassfication(
         ptm,
         ptm_config,
@@ -280,8 +280,9 @@ if __name__ == '__main__':
     """
     数据集：链接: https://pan.baidu.com/s/1n5RsF5y-1HUGbm6GCv76hg?pwd=rdxx 提取码: rdxx
     """
-    # train(load_model=False)
-    tokenizer = load_tokenizer(config.model_path)
-    text = '十个月婴儿的能力.刚满十个月婴儿应具备哪些能力?'
-    print(text)
-    predict(text, tokenizer)
+    train(load_model=False)
+    # tokenizer = load_tokenizer(config.model_path)
+    # text = '十个月婴儿的能力.刚满十个月婴儿应具备哪些能力?'
+    # print(text)
+    # predict(text, tokenizer)
+

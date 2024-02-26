@@ -16,7 +16,7 @@ from tqdm import tqdm
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from transformers import AdamW, get_linear_schedule_with_warmup
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, PromptModelForSequenceClassification
 from sklearn.metrics import f1_score
 from core.model_config import get_model_config
 from utils.time_util import get_time_diff
@@ -125,8 +125,9 @@ def evaluation(model, valid_dataloader, criterion):
     for ind, batch_data in enumerate(valid_dataloader):
         input_ids = batch_data['input_ids'].to(device)
         token_type_ids = batch_data['token_type_ids'].to(device)
-        attention_mask = batch_data['attention_mask'].to(device)
-        out = model(**{'input_ids': input_ids, 'token_type_ids': token_type_ids, 'attention_mask': attention_mask})
+        # attention_mask = batch_data['attention_mask'].to(device)
+        # out = model(**{'input_ids': input_ids, 'token_type_ids': token_type_ids, 'attention_mask': attention_mask})
+        out = model(**{'input_ids': input_ids, 'token_type_ids': token_type_ids})
         logits = out['logits']
         labels = batch_data['batch_label']
         y_label = y_label + labels.tolist()
@@ -222,7 +223,7 @@ def train(load_model=False):
                 print(msg.format(total_batch, loss.item(), micro_f1_score, time_diff))
 
             total_batch += 1
-            print("Epoch: %03d; loss = %.4f cost time  %.4f" % (epoch, np.mean(loss_total), time.time() - start_time))
+        print("Epoch: %03d; loss = %.4f cost time  %.4f" % (epoch, np.mean(loss_total), time.time() - start_time))
             # break
             # 最后一轮保存模型
         if epoch == config.epochs - 1:
