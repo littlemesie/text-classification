@@ -1,0 +1,61 @@
+version: "2"
+services:
+  # 第1个服务
+  nlp-service0:
+    restart: always
+    image: "commandcenter/aia/nlp/service:v3.0.01.df4f35d-arm64"
+    container_name: "aia.nlp.service0"
+    network_mode: "bridge"
+    user: root
+    volumes:
+        - "/etc/localtime:/etc/localtime"
+        - "/root/python/site-packages:/usr/local/lib/python3.8/site-packages"
+        - "/root/python/log:/aia-nlp-service/log"
+        - "/root/python/etc:/aia-nlp-service/etc"
+        - "/root/python/lib:/aia-nlp-service/lib"
+        - "/root/python/model_file:/aia-nlp-service/model_file"
+    ports:
+      - "26120:26120"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "500M"
+        max-file: "20"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "8192M"
+    environment:
+      - server_port=26120
+      - server_type=nlp-server
+      - tasks_num=all
+      -
+# 第1个服务的定时任务
+  scheduled-tasks0:
+    restart: always
+    image: "commandcenter/aia/nlp/service:v3.0.01.df4f35d-arm64"
+    container_name: "aia.nlp.tasks0"
+    network_mode: "bridge"
+    user: root
+    volumes:
+      - "/etc/localtime:/etc/localtime"
+      - "/root/python/site-packages:/usr/local/lib/python3.8/site-packages"
+      - "/root/python/log:/aia-nlp-service/log"
+      - "/root/python/etc:/aia-nlp-service/etc"
+      - "/root/python/lib:/aia-nlp-service/lib"
+      - "/root/python/model_file:/aia-nlp-service/model_file"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "500M"
+        max-file: "20"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "8192M"
+    environment:
+      - server_port=26120
+      - server_type=scheduled-tasks
+      - tasks_num=all

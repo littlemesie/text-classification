@@ -182,7 +182,7 @@ def evaluation(model, tokenizer, valid_dataloader, label_data, label2id):
         text_type_ids = batch_data['text_type_ids'].to(device)
         text_mask = batch_data['text_mask'].to(device)
         query_embedding = model.get_pooled_embedding(text_token, text_type_ids, text_mask)
-        recalled_idx, cosine_sims = final_index.knn_query(query_embedding.detach().cpu().numpy(), 5)
+        recalled_idx, cosine_sims = final_index.knn_query(query_embedding.detach().cpu().numpy(), config.recall_num)
         batch_label = batch_data['batch_label']
         for i, recall in enumerate(recalled_idx):
             p_label = np.zeros(len(label2id))
@@ -194,8 +194,9 @@ def evaluation(model, tokenizer, valid_dataloader, label_data, label2id):
             b_list = [label2id[bl] for bl in b_list]
             for bl in b_list:
                 b_label[bl] = 1
-            pred_label['y_label'].append(b_label[:5])
-            pred_label['pred_label'].append(p_label[:5])
+
+            pred_label['y_label'].append(b_label)
+            pred_label['pred_label'].append(p_label)
 
     micro_f1_score = f1_score(y_pred=pred_label['y_label'], y_true=pred_label['pred_label'], average="micro")
 
@@ -362,7 +363,7 @@ def predict(text, tokenizer):
     # print(input_ids)
     text_embedding = model.get_pooled_embedding(text_token, text_type_ids, text_mask)
 
-    idx, distances = index.knn_query(text_embedding.detach().numpy(), 5)
+    idx, distances = index.knn_query(text_embedding.detach().numpy(), config.recall_num)
     for i, ind in enumerate(idx[0]):
         label = id2label[ind]
         distance = distances[0][i]

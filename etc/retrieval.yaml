@@ -13,6 +13,7 @@ threshold: 0.5
 hnsw_max_elements: 1000000
 hnsw_ef: 100
 hnsw_m: 100
+recall_num: 10
 
 best_model: 'retrieval_match_classification_best'
 #best_model: 'retrieval_match_structbert_classification_best'
