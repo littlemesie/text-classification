@@ -1,0 +1,29 @@
+epochs: 10
+vocab_size: 21128
+batch_size: 32
+max_length: 512
+kernel_size: [2,4,8]
+num_kernels: 32
+stride: 1
+emb_size: 256
+dim_capsule: 32
+in_channels: 32
+out_channels: 32
+num_compressed_capsule: 128
+dropout: 0.1
+padding_index: 0
+route: 'akde'
+fc: 'fc'
+learning_rate: 1e-3
+betas:
+  - 0.9
+  - 0.999
+eps: 1e-08
+weight_decay: 0.01
+amsgrad: False
+validate_term_num: 500
+require_improvement: 1000
+sigmoid_threshold: 0.6
+
+model_path: '/home/mesie/python/aia-nlp-service/lib/pretrained/albert_chinese_base'
+#model_path: '/home/nlp/python/nlp/aia-nlp-service/lib/pretrained/albert_chinese_base'
